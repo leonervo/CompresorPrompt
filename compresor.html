@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compresor de Prompts con Gemini</title>
+    <style>
+        /* Variables de colores para manejar ambos temas dinámicamente */
+        :root {
+            --bg-body: #f0f4f8;
+            --bg-card: #ffffff;
+            --text-main: #2c3e50;
+            --text-muted: #5f6368;
+            --text-label: #3c4043;
+            --border-color: #dadce0;
+            --bg-output: #e8f0fe;
+            --border-output: #1a73e8;
+            --bg-th: #f8f9fa;
+            --tr-hover: #f1f3f4;
+        }
+
+        /* Paleta de colores para el Modo Oscuro */
+        [data-theme="dark"] {
+            --bg-body: #121212;
+            --bg-card: #1e1e1e;
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --text-label: #b3b3b3;
+            --border-color: #333333;
+            --bg-output: #1a233a;
+            --border-output: #4285f4;
+            --bg-th: #252525;
+            --tr-hover: #2a2a2a;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+            position: relative;
+        }
+
+        .header-container {
+            position: relative;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h1 { color: #1a73e8; margin-bottom: 5px; }
+        p.subtitle { color: var(--text-muted); margin: 0; }
+
+        .theme-switch-wrapper {
+            position: absolute;
+            top: 0;
+            right: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .theme-switch-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: bold;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .3s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px; width: 16px;
+            left: 4px; bottom: 4px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #1a73e8; }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        .config-box, .historial-section {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        .historial-section { padding: 20px; margin-top: 40px; }
+
+        label { font-weight: bold; display: block; margin-bottom: 5px; color: var(--text-label); }
+        
+        input[type="password"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            background-color: var(--bg-card);
+            color: var(--text-main);
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: background-color 0.3s, border-color 0.3s, color 0.3s;
+        }
+        textarea { height: 120px; padding: 12px; font-size: 16px; resize: vertical; margin-bottom: 15px; }
+        
+        button {
+            display: block;
+            width: 100%;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 14px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #1557b0; }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        
+        .output-container { position: relative; margin-top: 5px; }
+        .resultado-box {
+            background-color: var(--bg-output);
+            padding: 15px;
+            padding-right: 110px;
+            border-left: 5px solid var(--border-output);
+            border-radius: 4px;
+            min-height: 50px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 15px;
+            transition: background-color 0.3s, border-color 0.3s;
+        }
+        
+        .btn-copiar {
+            position: absolute; top: 10px; right: 10px;
+            width: auto; padding: 6px 12px; font-size: 13px;
+            background-color: #34a853; border-radius: 4px;
+            color: white; border: none; cursor: pointer; font-weight: bold;
+        }
+        .btn-copiar:hover { background-color: #2d8e47; }
+
+        .loading { color: #1a73e8; font-weight: bold; display: none; text-align: center; margin: 10px 0; }
+        
+        /* Caja del contador de tokens */
+        .contador-box { 
+            margin-top: 10px; 
+            font-size: 14px; 
+            color: #1557b0; 
+            font-weight: bold; 
+            text-align: right; 
+        }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+        th { background-color: var(--bg-th); color: var(--text-label); }
+        tr:hover { background-color: var(--tr-hover); }
+        .col-fecha { width: 20%; font-size: 12px; color: var(--text-muted); }
+        .col-texto { width: 40%; white-space: pre-wrap; word-break: break-word; }
+        
+        .btn-clear {
+            background-color: #ea4335; font-size: 12px; padding: 5px 10px; 
+            width: auto; display: inline-block; float: right; margin-top: -5px;
+        }
+        .btn-clear:hover { background-color: #c5221f; }
+    </style>
+</head>
+<body>
+
+    <div class="header-container">
+        <h1>Compresor de Prompts</h1>
+        <p class="subtitle">Optimizado dinámicamente por la IA de Gemini (by Leonervo)</p>
+        
+        <div class="theme-switch-wrapper">
+            <span class="theme-switch-label">Modo Oscuro</span>
+            <label class="switch">
+                <input type="checkbox" id="checkboxModoOscuro">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+    
+    <div class="config-box">
+        <label for="apiKey">Tu Gemini API Key:</label>
+        <input type="password" id="apiKey" placeholder="**api_key**" oninput="cargarHistorialLocal()">
+        <div id="peticionesContador" class="contador-box"></div>
+    </div>
+
+    <label for="inputTexto">Input del prompt:</label>
+    <textarea id="inputTexto" placeholder="Escribe tu petición normal aquí..."></textarea>
+    
+    <button id="btnComprimir" onclick="optimizarConGeminiFrontend()">Optimizar con Gemini 🤖</button>
+    
+    <div id="loading" class="loading">Procesando consulta en la IA de Google... Por favor espera.</div>
+
+    <label style="margin-top: 20px;">Output (Sintaxis Ultra-Minimizada):</label>
+    <div class="output-container">
+        <button id="btnCopiar" class="btn-copiar" onclick="copiarAlPortapapeles()">Copiar 📋</button>
+        <div id="outputTexto" class="resultado-box">El texto optimizado por Gemini aparecerá aquí...</div>
+    </div>
+
+    <div class="historial-section">
+        <button class="btn-clear" onclick="borrarHistorialLocal()">Borrar Todo 🗑️</button>
+        <h3 style="margin-top:0; color: var(--text-label); display: inline-block;">Historial de Optimizaciones</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-fecha">Fecha / Hora</th>
+                    <th class="col-texto">Original</th>
+                    <th class="col-texto">Optimizado (Gemini)</th>
+                </tr>
+            </thead>
+            <tbody id="tablaHistorialBody">
+                <tr>
+                    <td colspan="3" style="text-align: center; color: #9aa0a6;">Introduce tu API Key para ver tu historial</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        // ==========================================
+        // SWITCH DE MODO OSCURO (PERSISTENTE)
+        // ==========================================
+        const toggleSwitch = document.getElementById('checkboxModoOscuro');
+        const temaActual = localStorage.getItem('tema') || null;
+
+        if (temaActual) {
+            document.documentElement.setAttribute('data-theme', temaActual);
+            if (temaActual === 'dark') toggleSwitch.checked = true;
+        }
+
+        toggleSwitch.addEventListener('change', (e) => {
+            const tema = e.target.checked ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', tema);
+            localStorage.setItem('tema', tema);
+        });
+
+        // Intentar cargar el historial por defecto si ya hay una API Key escrita al recargar
+        window.onload = () => {
+            cargarHistorialLocal();
+        };
+
+
+        // ==========================================
+        // LÓGICA FRONTEND DE OPTIMIZACIÓN Y TOKENS
+        // ==========================================
+        async function optimizarConGeminiFrontend() {
+            const apiKey = document.getElementById("apiKey").value.trim();
+            const textoOriginal = document.getElementById("inputTexto").value.trim();
+            const outputDiv = document.getElementById("outputTexto");
+            const btn = document.getElementById("btnComprimir");
+            const loading = document.getElementById("loading");
+            const contadorDiv = document.getElementById("peticionesContador");
+
+            if (!apiKey) { return alert("Por favor, introduce tu Gemini API Key."); }
+            if (!textoOriginal) { return alert("Escribe algo de texto para optimizar."); }
+
+            btn.disabled = true;
+            loading.style.display = "block";
+            outputDiv.innerText = "...";
+
+            // Estimación aproximada de tokens (en inglés/español 1 token suele ser aprox 4 caracteres)
+            const tokensInputEstimados = Math.ceil(textoOriginal.length / 4);
+
+            try {
+                const systemInstruction = `Eres un optimizador de tokens experto. Tu único trabajo es recibir un prompt en lenguaje natural y transformarlo a una sintaxis ultra-comprimida y práctica orientada a modelos de lenguaje.
+REGLAS ESTRICTAS:
+1. Elimina todos los artículos (el, la, los, las, un, una).
+2. Elimina palabras de cortesía (por favor, gracias, podrías).
+3. Utiliza abreviaciones lógicas y cortas (usr para usuario, db para base de datos, err para error, prod para producción, cod para código, res para responder/resumen).
+4. Mantén solo las palabras clave necesarias para no perder el significado original.
+5. Devuelve ÚNICAMENTE el texto comprimido final. No saludes, no des explicaciones, no uses introducciones.`;
+
+                // URL Directa a la API oficial de Google Gemini
+                const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+                const response = await fetch(urlGemini, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: textoOriginal }] }],
+                        systemInstruction: { parts: [{ text: systemInstruction }] },
+                        generationConfig: { maxOutputTokens: 1024, temperature: 0.1 }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || "Error en la API de Gemini.");
+                }
+
+                const dataGemini = await response.json();
+                const textoOptimizado = dataGemini.candidates[0].content.parts[0].text.trim();
+                
+                outputDiv.innerText = textoOptimizado;
+
+                // Cálculo de tokens de salida y ahorro
+                const tokensOutputEstimados = Math.ceil(textoOptimizado.length / 4);
+                const porcentajeAhorro = Math.max(0, Math.round(((tokensInputEstimados - tokensOutputEstimados) / tokensInputEstimados) * 100));
+
+                // Mostrar métricas en la interfaz
+                contadorDiv.innerHTML = `Tokens enviados: ~${tokensInputEstimados} | Recibidos: ~${tokensOutputEstimados} (<span style="color:#34a853;">Ahorro: ${porcentajeAResultados(porcentajeAhorro)}%</span>)`;
+
+                // Guardar localmente en el LocalStorage
+                guardarEnHistorialLocal(textoOriginal, textoOptimizado);
+
+            } catch (error) {
+                alert("Hubo un error: " + error.message);
+                outputDiv.innerText = "Error al procesar.";
+            } finally {
+                btn.disabled = false;
+                loading.style.display = "none";
+            }
+        }
+
+        // Helper para imprimir texto bonito de porcentaje
+        function porcentajeAResultados(p) { return p; }
+
+        // ==========================================
+        // MANEJO DEL HISTORIAL LOCAL (LOCALSTORAGE)
+        // ==========================================
+        function guardarEnHistorialLocal(original, optimizado) {
+            const apiKey = document.getElementById("apiKey").value.trim();
+            if (!apiKey) return;
+
+            // Usamos una clave única en LocalStorage basada en la API Key (anonimizada mediante su longitud/tipo) para separar historiales
+            const storageKey = `historial_${apiKey.substring(0, 8)}`; 
+            
+            let historial = JSON.parse(localStorage.getItem(storageKey)) || [];
+
+            const nuevoItem = {
+                fecha_hora: new Date().toLocaleString(),
+                prompt_original: original,
+                prompt_optimizado: optimizado
+            };
+
+            // Insertar al inicio de la lista y limitar a los últimos 10
+            historial.unshift(nuevoItem);
+            if (historial.length > 10) historial.pop();
+
+            localStorage.setItem(storageKey, JSON.stringify(historial));
+            cargarHistorialLocal();
+        }
+
+        function cargarHistorialLocal() {
+            const apiKey = document.getElementById("apiKey").value.trim();
+            const tablaBody = document.getElementById("tablaHistorialBody");
+
+            if (!apiKey) {
+                tablaBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #9aa0a6;">Introduce tu API Key para ver tu historial</td></tr>`;
+                return;
+            }
+
+            const storageKey = `historial_${apiKey.substring(0, 8)}`;
+            const historial = JSON.parse(localStorage.getItem(storageKey)) || [];
+
+            if (historial.length > 0) {
+                tablaBody.innerHTML = "";
+                historial.forEach(item => {
+                    const fila = document.createElement("tr");
+                    fila.innerHTML = `
+                        <td class="col-fecha">${item.fecha_hora}</td>
+                        <td class="col-texto">${escapeHTML(item.prompt_original)}</td>
+                        <td class="col-texto"><code>${escapeHTML(item.prompt_optimizado)}</code></td>
+                    `;
+                    tablaBody.appendChild(fila);
+                });
+            } else {
+                tablaBody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: #9aa0a6;">No hay consultas registradas para esta sesión</td></tr>`;
+            }
+        }
+
+        function borrarHistorialLocal() {
+            const apiKey = document.getElementById("apiKey").value.trim();
+            if (!apiKey) return alert("Por favor introduce una API Key primero.");
+            
+            if (confirm("¿Estás seguro de que deseas borrar todo el historial de esta clave?")) {
+                const storageKey = `historial_${apiKey.substring(0, 8)}`;
+                localStorage.removeItem(storageKey);
+                cargarHistorialLocal();
+            }
+        }
+
+        // ==========================================
+        // FUNCIONES AUXILIARES
+        // ==========================================
+        function copiarAlPortapapeles() {
+            const outputTexto = document.getElementById("outputTexto").innerText;
+            const btnCopiar = document.getElementById("btnCopiar");
+
+            if (outputTexto === "El texto optimizado por Gemini aparecerá aquí..." || outputTexto === "Error al procesar." || outputTexto === "...") {
+                return;
+            }
+
+            navigator.clipboard.writeText(outputTexto).then(() => {
+                btnCopiar.innerText = "¡Copiado! ✓";
+                btnCopiar.style.backgroundColor = "#137333";
+                setTimeout(() => {
+                    btnCopiar.innerText = "Copiar 📋";
+                    btnCopiar.style.backgroundColor = "#34a853";
+                }, 2000);
+            });
+        }
+
+        function escapeHTML(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>

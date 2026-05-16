@@ -1,0 +1,9 @@
+# Bloquear el acceso a cualquier archivo con extensión .db
+<FilesMatch "\.db$">
+    Require all denied
+</FilesMatch>
+
+# Bloquear archivos de configuración ocultos
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
