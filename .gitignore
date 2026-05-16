@@ -8,3 +8,6 @@ Thumbs.db
 
 # XAMPP logs / temp
 *.log
+
+# Source (versión legible, solo distribuir compresor2.html)
+compresor.html
